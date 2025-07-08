@@ -1,0 +1,7 @@
+Flask
+flask-cors
+requests
+PyMuPDF
+gunicorn
+Flask-SQLAlchemy
+psycopg2-binary
