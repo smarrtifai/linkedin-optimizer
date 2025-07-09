@@ -6,4 +6,4 @@ gunicorn
 Flask-SQLAlchemy
 psycopg2-binary
 pymongo==3.11.0
-dnspython=2.1.0
+dnspython==2.1.0
