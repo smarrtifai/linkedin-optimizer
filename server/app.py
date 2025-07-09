@@ -15,7 +15,15 @@ CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 # MongoDB Configuration
 # ===============================
 MONGO_URI = os.environ.get("MONGO_URI")
-client = MongoClient(MONGO_URI)
+if not MONGO_URI:
+    raise RuntimeError("❌ MONGO_URI not set in environment variables")
+
+try:
+    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+    client.server_info()  # Trigger actual connection
+except Exception as mongo_err:
+    raise RuntimeError(f"❌ MongoDB connection failed: {mongo_err}")
+
 db = client["linkedin_optimizer"]
 submissions_collection = db["submissions"]
 
