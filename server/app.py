@@ -9,7 +9,7 @@ import os
 import re
 
 app = Flask(__name__)
-CORS(app, supports_credentials=True, origins=["https://optimize-linkedin.onrender.com"])
+CORS(app, resources={r"/*": {"origins": "https://optimize-linkedin.onrender.com"}}, supports_credentials=True)
 
 # ===============================
 # MongoDB Configuration
