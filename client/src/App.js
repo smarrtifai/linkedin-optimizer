@@ -49,7 +49,7 @@ function App() {
     formData.append("pdf", file);
     setLoading(true);
     try {
-      const response = await axios.post("http://127.0.0.1:5000/upload", formData);
+      const response = await axios.post(`${process.env.REACT_APP_API_BASE}/upload`, formData);
       setData(response.data.suggestions);
       setTimeout(() => {
         pieChartRef.current?.scrollIntoView({ behavior: "smooth" });
