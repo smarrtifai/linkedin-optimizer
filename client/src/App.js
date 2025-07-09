@@ -201,7 +201,7 @@ function App() {
               <p className="text-lg font-semibold text-orange-700">
                 1. Open your LinkedIn profile and click on the <strong>“More”</strong> button.
               </p>
-              <img src="/images/step1.png" alt="Step 1" className="rounded shadow border w-full max-w-lg mx-auto" />
+              <img src="/images/step1.PNG" alt="Step 1" className="rounded shadow border w-full max-w-lg mx-auto" />
             </div>
             <div className="text-center space-y-4">
               <p className="text-lg font-semibold text-orange-700">
