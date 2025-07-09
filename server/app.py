@@ -1,35 +1,23 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from flask_sqlalchemy import SQLAlchemy
 from pdf_reader import extract_text_from_pdf
 from groq_api import generate_groq_suggestions
+from urllib.parse import urlparse
+from pymongo import MongoClient
+from datetime import datetime
 import os
 import re
-from urllib.parse import urlparse
 
 app = Flask(__name__)
 CORS(app)
 
 # ===============================
-# Database Configuration
+# MongoDB Configuration
 # ===============================
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL", "sqlite:///local.db")
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-db = SQLAlchemy(app)
-
-# ===============================
-# Model
-# ===============================
-class Submission(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(120))
-    email = db.Column(db.String(120))
-    linkedin_url = db.Column(db.String(300))
-    filename = db.Column(db.String(255), nullable=False)
-    score = db.Column(db.Integer)
-    raw_text = db.Column(db.Text)
-    timestamp = db.Column(db.DateTime, default=db.func.now())
+MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
+client = MongoClient(MONGO_URI)
+db = client["linkedin_optimizer"]
+submissions_collection = db["submissions"]
 
 # ===============================
 # Routes
@@ -90,17 +78,17 @@ def upload():
         suggestions = generate_groq_suggestions(joined_text)
         score = suggestions.get("overallscore", 0)
 
-        # Save to DB
-        new_entry = Submission(
-            name=name,
-            email=email,
-            linkedin_url=linkedin_url,
-            filename=file.filename,
-            score=score,
-            raw_text=joined_text
-        )
-        db.session.add(new_entry)
-        db.session.commit()
+        # Save to MongoDB
+        submission = {
+            "name": name,
+            "email": email,
+            "linkedin_url": linkedin_url,
+            "filename": file.filename,
+            "score": score,
+            "raw_text": joined_text,
+            "timestamp": datetime.utcnow()
+        }
+        submissions_collection.insert_one(submission)
 
         return jsonify({
             "suggestions": suggestions,
@@ -116,28 +104,25 @@ def upload():
 
 @app.route("/submissions", methods=["GET"])
 def get_submissions():
-    records = Submission.query.order_by(Submission.timestamp.desc()).all()
-    return jsonify([
-        {
-            "name": r.name,
-            "email": r.email,
-            "linkedin": r.linkedin_url,
-            "filename": r.filename,
-            "score": r.score,
-            "timestamp": r.timestamp.isoformat()
-        }
-        for r in records
-    ])
+    records = submissions_collection.find().sort("timestamp", -1)
+    result = []
+    for r in records:
+        result.append({
+            "name": r.get("name"),
+            "email": r.get("email"),
+            "linkedin": r.get("linkedin_url"),
+            "filename": r.get("filename"),
+            "score": r.get("score"),
+            "timestamp": r.get("timestamp").isoformat() if r.get("timestamp") else ""
+        })
+    return jsonify(result)
 
 @app.route("/")
 def index():
-    return "✅ LinkedIn Optimizer API is running."
+    return "✅ LinkedIn Optimizer API (MongoDB version) is running."
 
 # ===============================
 # Run the app
 # ===============================
 if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()
-        print("✅ Database initialized.")
-    app.run(host='127.0.0.1', port=5000, debug=True)
+    app.run(host='127.0.0.1', port=5000, debug=True, use_reloader=False)
