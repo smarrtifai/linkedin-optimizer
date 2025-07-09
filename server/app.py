@@ -14,7 +14,7 @@ CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 # ===============================
 # MongoDB Configuration
 # ===============================
-MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
+MONGO_URI = os.environ.get("MONGO_URI")
 client = MongoClient(MONGO_URI)
 db = client["linkedin_optimizer"]
 submissions_collection = db["submissions"]
