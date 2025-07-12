@@ -6,6 +6,9 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = "llama3-70b-8192"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
+if not GROQ_API_KEY:
+    raise EnvironmentError("❌ GROQ_API_KEY is not set in environment variables.")
+
 headers = {
     "Authorization": f"Bearer {GROQ_API_KEY}",
     "Content-Type": "application/json"
@@ -61,12 +64,21 @@ def generate_groq_suggestions(text):
         "temperature": 0.7
     }
 
-    response = requests.post(GROQ_API_URL, json=payload, headers=headers)
-    result = response.json()
-    raw = result["choices"][0]["message"]["content"]
-    print("[DEBUG GROQ RAW OUTPUT]:\n", raw)  # for debugging
-    return parse_response(raw)
+    try:
+        response = requests.post(GROQ_API_URL, json=payload, headers=headers)
+        response.raise_for_status()
+        result = response.json()
 
+        raw = result["choices"][0]["message"]["content"]
+        print("[✅ GROQ RAW OUTPUT]:\n", raw[:500], "..." if len(raw) > 500 else "")
+        return parse_response(raw)
+
+    except requests.exceptions.HTTPError as http_err:
+        print("❌ GROQ API HTTP error:", http_err)
+        raise RuntimeError("Groq API request failed")
+    except Exception as e:
+        print("❌ GROQ API unknown error:", repr(e))
+        raise RuntimeError("Groq API failed to generate suggestions")
 
 def parse_response(raw_text):
     sections = {
@@ -91,8 +103,8 @@ def parse_response(raw_text):
         if not line:
             continue
 
-        # Match overall score (e.g., Overall Score: 72/100)
-        overall_match = re.match(r"(?i)^overall score[:\s]*([0-9]{1,3})", line)
+        # Match overall score more flexibly
+        overall_match = re.search(r"overall score[:\s]*([0-9]{1,3})", line, re.IGNORECASE)
         if overall_match:
             flush_buffer()
             sections["overallscore"] = int(overall_match.group(1))
@@ -122,9 +134,9 @@ def parse_response(raw_text):
 
     flush_buffer()
 
-    # Fallback if LLM failed to provide score
+    # Fallback score logic
     if not sections["overallscore"]:
-        total_sections = sum(bool(sections[key]) for key in ["about", "experience", "skills", "completeness"])
+        total_sections = sum(bool(sections[k]) for k in ["about", "experience", "skills", "completeness"])
         sections["overallscore"] = total_sections * 25
 
     return sections

@@ -28,17 +28,22 @@ db = client["linkedin_optimizer"]
 submissions_collection = db["submissions"]
 
 # ===============================
-# Routes
+# Upload Route
 # ===============================
 @app.route("/upload", methods=["POST"])
 def upload():
     file = request.files.get("pdf")
     if not file:
+        print("❌ No file uploaded")
         return jsonify({"error": "No file provided"}), 400
 
     try:
         lines, hyperlinks = extract_text_from_pdf(file)
         joined_text = " ".join(lines + hyperlinks)
+
+        if not joined_text.strip():
+            print("❌ Empty or unreadable PDF content")
+            return jsonify({"error": "No readable text found in the PDF."}), 400
 
         # Extract name
         name = next(
@@ -77,14 +82,19 @@ def upload():
             if linkedin_match:
                 linkedin_url = linkedin_match.group(0)
 
-        # Clean LinkedIn URL (remove query params)
+        # Clean LinkedIn URL
         if "linkedin.com" in linkedin_url:
             parsed = urlparse(linkedin_url)
             linkedin_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
 
+        print("✅ Extracted name:", name)
+        print("✅ Extracted email:", email)
+        print("✅ Extracted LinkedIn:", linkedin_url)
+
         # Generate suggestions
         suggestions = generate_groq_suggestions(joined_text)
         score = suggestions.get("overallscore", 0)
+        print("✅ Groq score:", score)
 
         # Save to MongoDB
         submission = {
@@ -96,7 +106,12 @@ def upload():
             "raw_text": joined_text,
             "timestamp": datetime.utcnow()
         }
-        submissions_collection.insert_one(submission)
+
+        try:
+            submissions_collection.insert_one(submission)
+            print("✅ Submission saved to MongoDB")
+        except Exception as db_error:
+            print("❌ MongoDB insert error:", db_error)
 
         return jsonify({
             "suggestions": suggestions,
@@ -108,29 +123,41 @@ def upload():
         })
 
     except Exception as e:
+        print("❌ [UPLOAD ERROR]", repr(e))
         return jsonify({"error": str(e)}), 500
 
+# ===============================
+# View Submissions
+# ===============================
 @app.route("/submissions", methods=["GET"])
 def get_submissions():
-    records = submissions_collection.find().sort("timestamp", -1)
-    result = []
-    for r in records:
-        result.append({
-            "name": r.get("name"),
-            "email": r.get("email"),
-            "linkedin": r.get("linkedin_url"),
-            "filename": r.get("filename"),
-            "score": r.get("score"),
-            "timestamp": r.get("timestamp").isoformat() if r.get("timestamp") else ""
-        })
-    return jsonify(result)
+    try:
+        records = submissions_collection.find().sort("timestamp", -1)
+        result = []
+        for r in records:
+            result.append({
+                "name": r.get("name"),
+                "email": r.get("email"),
+                "linkedin": r.get("linkedin_url"),
+                "filename": r.get("filename"),
+                "score": r.get("score"),
+                "timestamp": r.get("timestamp").isoformat() if r.get("timestamp") else ""
+            })
+        return jsonify(result)
+    except Exception as e:
+        print("❌ [FETCH SUBMISSIONS ERROR]", repr(e))
+        return jsonify({"error": str(e)}), 500
 
+# ===============================
+# Health Check
+# ===============================
 @app.route("/")
 def index():
     return "✅ LinkedIn Optimizer API (MongoDB version) is running."
 
 # ===============================
-# Run the app
+# Run App (Render-compatible)
 # ===============================
 if __name__ == "__main__":
-    app.run(host='127.0.0.1', port=5000, debug=True, use_reloader=False)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
